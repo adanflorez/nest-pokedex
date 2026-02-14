@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { MongoServerError } from 'mongodb';
-import { isValidObjectId, Model } from 'mongoose';
+import { InsertManyOptions, isValidObjectId, Model } from 'mongoose';
 import { CreatePokemonDto } from './dto/create-pokemon.dto';
 import { UpdatePokemonDto } from './dto/update-pokemon.dto';
 import { Pokemon } from './entities/pokemon.entity';
@@ -20,12 +20,29 @@ export class PokemonService {
 
   async create(createPokemonDto: CreatePokemonDto) {
     try {
+      const options: InsertManyOptions = {
+        ordered: false, // si uno falla, sigue con los demás
+        rawResult: true, // te devuelve info del write result
+      };
       const pokemon = {
         name: createPokemonDto.name.toLocaleLowerCase(),
         no: createPokemonDto.no,
       };
-      const pokemonSaved = await this.pokemonModel.create(pokemon);
+      const pokemonSaved = await this.pokemonModel.create(pokemon, options);
       return pokemonSaved;
+    } catch (error) {
+      this.handleExceptions(error);
+    }
+  }
+
+  async createMany(createPokemonDto: CreatePokemonDto[]) {
+    try {
+      const pokemons = createPokemonDto.map((pokemon) => ({
+        name: pokemon.name.toLocaleLowerCase(),
+        no: pokemon.no,
+      }));
+      const pokemonsSaved = await this.pokemonModel.insertMany(pokemons);
+      return pokemonsSaved;
     } catch (error) {
       this.handleExceptions(error);
     }
@@ -84,6 +101,11 @@ export class PokemonService {
     if (deletedCount === 0) {
       throw new BadRequestException(`Pokemon with id "${id}" not found`);
     }
+  }
+
+  async removeAll() {
+    const result = await this.pokemonModel.deleteMany({});
+    return result;
   }
 
   private handleExceptions(error: unknown) {
